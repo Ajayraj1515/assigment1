@@ -1,102 +1,75 @@
-const express = require('express')
-const {open} = require('sqlite')
-const sqlite3 = require('sqlite3')
-const path = require('path')
-const {format} = require('date-fns')
+const express = require('express');
+const { open } = require('sqlite');
+const sqlite3 = require('sqlite3');
+const path = require('path');
+const { format } = require('date-fns');
 
-const databasePath = path.join(__dirname, 'todoApplication.db')
+const databasePath = path.join(__dirname, 'todoApplication.db');
+const app = express();
+app.use(express.json());
 
-const app = express()
-
-app.use(express.json())
-
-let database = null
+let database = null;
 
 const initializeDbAndServer = async () => {
   try {
     database = await open({
       filename: databasePath,
       driver: sqlite3.Database,
-    })
+    });
 
     app.listen(3000, () =>
       console.log('Server Running at http://localhost:3000/'),
-    )
+    );
   } catch (error) {
-    console.log(`DB Error: ${error.message}`)
-    process.exit(1)
+    console.error(`DB Error: ${error.message}`);
+    process.exit(1);
   }
-}
+};
 
-initializeDbAndServer()
+initializeDbAndServer();
 
-const formatDate = date => format(new Date(date), 'yyyy-MM-dd')
-
-const isValidPriority = priority => ['HIGH', 'MEDIUM', 'LOW'].includes(priority)
-const isValidStatus = status =>
-  ['TO DO', 'IN PROGRESS', 'DONE'].includes(status)
-const isValidCategory = category =>
-  ['WORK', 'HOME', 'LEARNING'].includes(category)
-
-const hasPriorityAndStatusProperties = requestQuery => {
-  return (
-    requestQuery.priority !== undefined && requestQuery.status !== undefined
-  )
-}
-
-const hasPriorityProperty = requestQuery => {
-  return requestQuery.priority !== undefined
-}
-
-const hasStatusProperty = requestQuery => {
-  return requestQuery.status !== undefined
-}
+const formatDate = (date) => format(new Date(date), 'yyyy-MM-dd');
+const isValidPriority = (priority) =>
+  ['HIGH', 'MEDIUM', 'LOW'].includes(priority);
+const isValidStatus = (status) =>
+  ['TO DO', 'IN PROGRESS', 'DONE'].includes(status);
+const isValidCategory = (category) =>
+  ['WORK', 'HOME', 'LEARNING'].includes(category);
 
 app.get('/todos/', async (request, response) => {
-  const {status, priority, category, search_q} = request.query
+  const { status, priority, category, search_q } = request.query;
 
   if (status && !isValidStatus(status)) {
-    response.status(400).send('Invalid Todo Status')
-    return
+    return response.status(400).send('Invalid Todo Status');
   }
 
   if (priority && !isValidPriority(priority)) {
-    response.status(400).send('Invalid Todo Priority')
-    return
+    return response.status(400).send('Invalid Todo Priority');
   }
 
   if (category && !isValidCategory(category)) {
-    response.status(400).send('Invalid Todo Category')
-    return
+    return response.status(400).send('Invalid Todo Category');
   }
 
-  let getTodosQuery = `
-    SELECT *
-    FROM todo
-    WHERE 1`
+  let getTodosQuery = `SELECT * FROM todo WHERE 1`;
 
-  if (status) getTodosQuery += ` AND status = '${status}'`
-  if (priority) getTodosQuery += ` AND priority = '${priority}'`
-  if (category) getTodosQuery += ` AND category = '${category}'`
-  if (search_q) getTodosQuery += ` AND todo LIKE '%${search_q}%'`
+  if (status) getTodosQuery += ` AND status = '${status}'`;
+  if (priority) getTodosQuery += ` AND priority = '${priority}'`;
+  if (category) getTodosQuery += ` AND category = '${category}'`;
+  if (search_q) getTodosQuery += ` AND todo LIKE '%${search_q}%'`;
 
   try {
-    const data = await database.all(getTodosQuery)
-    response.send(data)
+    const data = await database.all(getTodosQuery);
+    response.send(data);
   } catch (error) {
-    console.error(error.message)
-    response.status(500).send('Internal Server Error')
+    console.error(error.message);
+    response.status(500).send('Internal Server Error');
   }
-})
-
+});
 
 app.get('/todos/:todoId/', async (request, response) => {
-  const {todoId} = request.params;
-
-  const getTodoQuery = `
-    SELECT *
-    FROM todo
-    WHERE id = ?;`;
+  const { todoId } = request.params;
+  const getTodoQuery = `SELECT * FROM todo WHERE id = ?`;
 
   try {
     const todo = await database.get(getTodoQuery, todoId);
@@ -111,30 +84,27 @@ app.get('/todos/:todoId/', async (request, response) => {
   }
 });
 
-
 app.get('/agenda/', async (request, response) => {
-  const {date} = request.query
+  const { date } = request.query;
 
   if (!date || isNaN(Date.parse(date))) {
-    response.status(400).send('Invalid Due Date')
-    return
+    return response.status(400).send('Invalid Due Date');
   }
 
-  const formattedDate = formatDate(date)
-
-  const getAgendaQuery = `
-    SELECT *
-    FROM todo
-    WHERE due_date = ?;`
+  const formattedDate = formatDate(date);
+  const getAgendaQuery = `SELECT * FROM todo WHERE due_date = ?`;
 
   try {
-    const agenda = await database.all(getAgendaQuery, formattedDate)
-    response.send(agenda)
+    const agenda = await database.all(getAgendaQuery, formattedDate);
+    response.send(agenda);
   } catch (error) {
-    console.error(error.message)
-    response.status(500).send('Internal Server Error')
+    console.error(error.message);
+    response.status(500).send('Internal Server Error');
   }
-})
+});
+
+
+
 
 app.post('/todos/', async (request, response) => {
   const {id, todo, priority, status, category, dueDate} = request.body
@@ -182,52 +152,81 @@ app.post('/todos/', async (request, response) => {
 })
 
 app.put('/todos/:todoId/', async (request, response) => {
-  const {todoId} = request.params
-  const {status, priority, category} = request.body
+    const { todoId } = request.params;
+    const { status, priority, category, dueDate, todo } = request.body;
 
-  if (status !== undefined && !isValidStatus(status)) {
-    response.status(400).send('Invalid Todo Status')
-    return
-  }
+    if (status !== undefined && !isValidStatus(status)) {
+        response.status(400).send('Invalid Todo Status');
+        return;
+    }
 
-  if (priority !== undefined && !isValidPriority(priority)) {
-    response.status(400).send('Invalid Todo Priority')
-    return
-  }
+    if (priority !== undefined && !isValidPriority(priority)) {
+        response.status(400).send('Invalid Todo Priority');
+        return;
+    }
 
-  if (category !== undefined && !isValidCategory(category)) {
-    response.status(400).send('Invalid Todo Category')
-    return
-  }
+    if (category !== undefined && !isValidCategory(category)) {
+        response.status(400).send('Invalid Todo Category');
+        return;
+    }
 
-  let updateColumn = ''
+    if (dueDate !== undefined && (isNaN(Date.parse(dueDate)) || !dueDate.match(/^\d{4}-\d{2}-\d{2}$/))) {
+        response.status(400).send('Invalid Due Date');
+        return;
+    }
 
-  if (status !== undefined) {
-    updateColumn = 'status'
-  } else if (priority !== undefined) {
-    updateColumn = 'priority'
-  } else if (category !== undefined) {
-    updateColumn = 'category'
-  }
+    let updateColumn = '';
 
-  const updateTodoQuery = `
-    UPDATE todo
-    SET ${updateColumn} = ?
-    WHERE id = ?;`
+    if (status !== undefined) {
+        updateColumn = 'status';
+    } else if (priority !== undefined) {
+        updateColumn = 'priority';
+    } else if (category !== undefined) {
+        updateColumn = 'category';
+    } else if (dueDate !== undefined) {
+        updateColumn = 'due_date';
+    } else if (todo !== undefined) {
+        updateColumn = 'todo';
+    }
 
-  try {
-    await database.run(updateTodoQuery, [
-      status || priority || category,
-      todoId,
-    ])
-    response.send(
-      `${updateColumn.charAt(0).toUpperCase() + updateColumn.slice(1)} Updated`,
-    )
-  } catch (error) {
-    console.error(error.message)
-    response.status(500).send('Internal Server Error')
-  }
-})
+    const updateTodoQuery = `
+        UPDATE todo
+        SET ${updateColumn} = ?
+        WHERE id = ?;`;
+
+    try {
+        await database.run(updateTodoQuery, [status || priority || category || dueDate || todo, todoId]);
+
+        let message = '';
+        switch (updateColumn) {
+            case 'status':
+                message = 'Status Updated';
+                break;
+            case 'priority':
+                message = 'Priority Updated';
+                break;
+            case 'category':
+                message = 'Category Updated';
+                break;
+            case 'due_date':
+                message = 'Due Date Updated';
+                break;
+            case 'todo':
+                message = 'Todo Updated';
+                break;
+            default:
+                message = 'Property Updated';
+                break;
+        }
+
+        response.send(message);
+    } catch (error) {
+        console.error(error.message);
+        response.status(500).send('Internal Server Error');
+    }
+});
+
+
 
 app.delete('/todos/:todoId/', async (request, response) => {
   const {todoId} = request.params
@@ -242,4 +241,4 @@ app.delete('/todos/:todoId/', async (request, response) => {
   }
 })
 
-module.exports = app 
+module.exports = app
